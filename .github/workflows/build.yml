@@ -25,14 +25,11 @@ jobs:
 
     - name: Prepare Project Structure
       run: |
-        # Kaynak kodlar için dizin oluştur
         mkdir -p Sources
 
-        # Swift dosyalarını taşı
         mv GameRuntimeManager.swift Sources/
         mv ContentView.swift Sources/
 
-        # Uygulama ana giriş dosyasını oluştur
         cat << 'EOF' > Sources/AppMain.swift
         import SwiftUI
 
@@ -46,7 +43,6 @@ jobs:
         }
         EOF
 
-        # Xcode projesini otomatik üretecek olan project.yml dosyasını oluştur
         cat << 'EOF' > project.yml
         name: PCGameEmulator
         options:
@@ -64,7 +60,7 @@ jobs:
               INFOPLIST_FILE: Sources/Info.plist
         EOF
 
-        # Basit bir Info.plist oluşturalım
+        # Info.plist dosyasındaki eksik '<' karakteri düzeltildi
         cat << 'EOF' > Sources/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -74,29 +70,52 @@ jobs:
             <string>com.emulatore.pcgame.PCGameEmulator</string>
             <key>CFBundleName</key>
             <string>PCGameEmulator</string>
+            <key>CFBundleDisplayName</key>
+            <string>PC Game Emulator</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
             <key>CFBundleShortVersionString</key>
             <string>1.0</string>
             <key>CFBundleVersion</key>
             <string>1</string>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
             <key>UILaunchScreen</key>
             <dict/>
+            <key>UISupportedInterfaceOrientations</key>
+            <array>
+                <string>UIInterfaceOrientationPortrait</string>
+                <string>UIInterfaceOrientationLandscapeLeft</string>
+                <string>UIInterfaceOrientationLandscapeRight</string>
+            </array>
         </dict>
         </plist>
         EOF
 
-    - name: Generate Xcode Project & Build
+    - name: Build and Package IPA
       run: |
-        # Xcodegen ile .xcodeproj dosyasını üret
         xcodegen generate
 
-        # Projeyi iOS Simulator hedefi için derle (Test build)
-        xcodebuild -project PCGameEmulator.xcodeproj \
-                   -scheme PCGameEmulator \
-                   -sdk iphonesimulator \
-                   -configuration Release \
-                   CODE_SIGN_IDENTITY="" \
-                   CODE_SIGNING_REQUIRED=NO \
-                   CODE_SIGNING_ALLOWED=NO \
-                   build
-        
-        echo "Derleme başarıyla tamamlandı!"
+        # Arşivle (Archive)
+        xcodebuild archive \
+          -project PCGameEmulator.xcodeproj \
+          -scheme PCGameEmulator \
+          -archivePath build/PCGameEmulator.xcarchive \
+          -sdk iphoneos \
+          -configuration Release \
+          CODE_SIGN_IDENTITY="" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+        # IPA klasörünü oluştur ve paketle
+        mkdir -p build/Payload
+        mv build/PCGameEmulator.xcarchive/Products/Applications/PCGameEmulator.app build/Payload/
+        cd build
+        zip -r PCGameEmulator.ipa Payload
+        cd ..
+
+    - name: Upload IPA Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: PCGameEmulator-IPA
+        path: build/PCGameEmulator.ipa
