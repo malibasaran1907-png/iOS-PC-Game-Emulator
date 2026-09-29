@@ -14,10 +14,51 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Check Environment
+    - name: Set up Xcode Environment
       run: |
-        echo "GitHub Actions Mac sunucusu başarıyla ayağa kalktı."
-        # Sistemde yüklü olan aktif Xcode sürümünü seçelim
         sudo xcode-select -switch /Applications/Xcode.app
         xcodebuild -version
-        swift --version
+
+    - name: Create Xcode Project & Add Files
+      run: |
+        # Swift kullanarak modern bir iOS uygulama yapısı (Swift Package / Project) oluşturalım
+        mkdir -p PCGameEmulator/Sources/PCGameEmulator
+        
+        # Dosyalarımızı doğru klasöre taşıyalım
+        mv GameRuntimeManager.swift PCGameEmulator/Sources/PCGameEmulator/
+        mv ContentView.swift PCGameEmulator/Sources/PCGameEmulator/
+        
+        # Uygulama ana giriş dosyasını oluşturalım
+        cat << 'EOF' > PCGameEmulator/Sources/PCGameEmulator/AppMain.swift
+        import SwiftUI
+
+        @main
+        struct PCGameEmulatorApp: App {
+            var body: some Scene {
+                WindowGroup {
+                    ContentView()
+                }
+            }
+        }
+        EOF
+
+        # Paket yapılandırma dosyası (Package.swift) oluşturalım
+        cat << 'EOF' > PCGameEmulator/Package.swift
+        // swift-tools-version: 5.9
+        let package = Package(
+            name: "PCGameEmulator",
+            platforms: [.iOS(.16)],
+            products: [
+                .library(name: "PCGameEmulator", targets: ["PCGameEmulator"])
+            ],
+            targets: [
+                .target(name: "PCGameEmulator", path: "Sources/PCGameEmulator")
+            ]
+        )
+        EOF
+
+    - name: Build Project
+      run: |
+        cd PCGameEmulator
+        swift build -Xswiftc "-sdk" -Xswiftc "$(xcrun --sdk iphoneos --show-sdk-path)" -Xswiftc "-target" -Xswiftc "arm64-apple-ios16.0"
+        echo "Derleme başarıyla tamamlandı!"
