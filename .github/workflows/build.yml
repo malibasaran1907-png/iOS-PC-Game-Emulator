@@ -19,17 +19,21 @@ jobs:
         sudo xcode-select -switch /Applications/Xcode.app
         xcodebuild -version
 
-    - name: Create Xcode Project & Add Files
+    - name: Install XcodeGen (Project Generator)
       run: |
-        # Swift kullanarak modern bir iOS uygulama yapısı (Swift Package / Project) oluşturalım
-        mkdir -p PCGameEmulator/Sources/PCGameEmulator
-        
-        # Dosyalarımızı doğru klasöre taşıyalım
-        mv GameRuntimeManager.swift PCGameEmulator/Sources/PCGameEmulator/
-        mv ContentView.swift PCGameEmulator/Sources/PCGameEmulator/
-        
-        # Uygulama ana giriş dosyasını oluşturalım
-        cat << 'EOF' > PCGameEmulator/Sources/PCGameEmulator/AppMain.swift
+        brew install xcodegen
+
+    - name: Prepare Project Structure
+      run: |
+        # Kaynak kodlar için dizin oluştur
+        mkdir -p Sources
+
+        # Swift dosyalarını taşı
+        mv GameRuntimeManager.swift Sources/
+        mv ContentView.swift Sources/
+
+        # Uygulama ana giriş dosyasını oluştur
+        cat << 'EOF' > Sources/AppMain.swift
         import SwiftUI
 
         @main
@@ -42,23 +46,57 @@ jobs:
         }
         EOF
 
-        # Paket yapılandırma dosyası (Package.swift) oluşturalım
-        cat << 'EOF' > PCGameEmulator/Package.swift
-        // swift-tools-version: 5.9
-        let package = Package(
-            name: "PCGameEmulator",
-            platforms: [.iOS(.16)],
-            products: [
-                .library(name: "PCGameEmulator", targets: ["PCGameEmulator"])
-            ],
-            targets: [
-                .target(name: "PCGameEmulator", path: "Sources/PCGameEmulator")
-            ]
-        )
+        # Xcode projesini otomatik üretecek olan project.yml dosyasını oluştur
+        cat << 'EOF' > project.yml
+        name: PCGameEmulator
+        options:
+          bundleIdPrefix: com.emulatore.pcgame
+        targets:
+          PCGameEmulator:
+            type: application
+            platform: iOS
+            deploymentTarget: "16.0"
+            sources: [Sources]
+            settings:
+              CODE_SIGN_IDENTITY: ""
+              CODE_SIGNING_REQUIRED: "NO"
+              CODE_SIGNING_ALLOWED: "NO"
+              INFOPLIST_FILE: Sources/Info.plist
         EOF
 
-    - name: Build Project
+        # Basit bir Info.plist oluşturalım
+        cat << 'EOF' > Sources/Info.plist
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleIdentifier</key>
+            <string>com.emulatore.pcgame.PCGameEmulator</string>
+            <key>CFBundleName</key>
+            <string>PCGameEmulator</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>CFBundleVersion</key>
+            <string>1</string>
+            <key>UILaunchScreen</key>
+            <dict/>
+        </dict>
+        </plist>
+        EOF
+
+    - name: Generate Xcode Project & Build
       run: |
-        cd PCGameEmulator
-        swift build -Xswiftc "-sdk" -Xswiftc "$(xcrun --sdk iphoneos --show-sdk-path)" -Xswiftc "-target" -Xswiftc "arm64-apple-ios16.0"
+        # Xcodegen ile .xcodeproj dosyasını üret
+        xcodegen generate
+
+        # Projeyi iOS Simulator hedefi için derle (Test build)
+        xcodebuild -project PCGameEmulator.xcodeproj \
+                   -scheme PCGameEmulator \
+                   -sdk iphonesimulator \
+                   -configuration Release \
+                   CODE_SIGN_IDENTITY="" \
+                   CODE_SIGNING_REQUIRED=NO \
+                   CODE_SIGNING_ALLOWED=NO \
+                   build
+        
         echo "Derleme başarıyla tamamlandı!"
