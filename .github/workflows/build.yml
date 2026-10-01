@@ -60,6 +60,7 @@ jobs:
               INFOPLIST_FILE: Sources/Info.plist
         EOF
 
+        # CFBundleExecutable anahtarı eklenerek hata giderildi
         cat << 'EOF' > Sources/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -71,6 +72,8 @@ jobs:
             <string>PCGameEmulator</string>
             <key>CFBundleDisplayName</key>
             <string>PC Game Emulator</string>
+            <key>CFBundleExecutable</key>
+            <string>PCGameEmulator</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>CFBundleShortVersionString</key>
@@ -95,7 +98,6 @@ jobs:
       run: |
         xcodegen generate
 
-        # Doğrudan derleme ve çıktı konumu yakalama
         xcodebuild -project PCGameEmulator.xcodeproj \
                    -scheme PCGameEmulator \
                    -sdk iphoneos \
@@ -105,7 +107,6 @@ jobs:
                    CODE_SIGNING_ALLOWED=NO \
                    build
 
-        # Derlenen .app dosyasını bul ve Payload içine kopyala
         APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "PCGameEmulator.app" -type d | head -n 1)
         
         if [ -z "$APP_PATH" ]; then
