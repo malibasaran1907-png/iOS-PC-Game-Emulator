@@ -27,7 +27,7 @@ jobs:
       run: |
         mkdir -p Sources
 
-        # GameRuntimeManager.swift dosyasını doğrudan güncel haliyle oluşturalım
+        # GameRuntimeManager.swift
         cat << 'EOF' > Sources/GameRuntimeManager.swift
         import Foundation
 
@@ -81,7 +81,7 @@ jobs:
         }
         EOF
 
-        # ContentView.swift dosyasını butonlu güncel haliyle doğrudan oluşturalım
+        # ContentView.swift
         cat << 'EOF' > Sources/ContentView.swift
         import SwiftUI
         import UniformTypeIdentifiers
@@ -172,6 +172,7 @@ jobs:
         }
         EOF
 
+        # AppMain.swift
         cat << 'EOF' > Sources/AppMain.swift
         import SwiftUI
 
@@ -185,6 +186,7 @@ jobs:
         }
         EOF
 
+        # project.yml
         cat << 'EOF' > project.yml
         name: PCGameEmulator
         options:
@@ -205,11 +207,12 @@ jobs:
               INFOPLIST_FILE: Sources/Info.plist
         EOF
 
+        # Info.plist (Düzeltildi: <dict> etiketi eklendi)
         cat << 'EOF' > Sources/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
-        dict>
+        <dict>
             <key>CFBundleIdentifier</key>
             <string>com.emulatore.pcgame.PCGameEmulator</string>
             <key>CFBundleName</key>
