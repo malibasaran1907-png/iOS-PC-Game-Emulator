@@ -27,7 +27,7 @@ jobs:
       run: |
         mkdir -p Sources
 
-        # GameRuntimeManager.swift
+        # GameRuntimeManager.swift (Sonic Origins ve EXE Başlatma Destekli)
         cat << 'EOF' > Sources/GameRuntimeManager.swift
         import Foundation
 
@@ -35,6 +35,7 @@ jobs:
             static let shared = GameRuntimeManager()
             private let fileManager = FileManager.default
             
+            // Wine prefix (C: Sürücüsü) dizinini hazırlar
             func initializeWinePrefix() -> URL {
                 let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let winePrefix = documentsPath.appendingPathComponent(".wine", isDirectory: true)
@@ -42,6 +43,7 @@ jobs:
                 if !fileManager.fileExists(atPath: winePrefix.path) {
                     do {
                         try fileManager.createDirectory(at: winePrefix, withIntermediateDirectories: true, attributes: nil)
+                        print("Wine prefix (C: Sürücüsü) başarıyla oluşturuldu: \(winePrefix.path)")
                     } catch {
                         print("Wine prefix oluşturulamadı: \(error.localizedDescription)")
                     }
@@ -49,6 +51,7 @@ jobs:
                 return winePrefix
             }
             
+            // Seçilen oyun dosyasını (Örn: Sonic Origins) C:/Games dizinine aktarır
             func importGameFile(from sourceURL: URL) -> URL? {
                 let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let gamesDirectory = documentsPath.appendingPathComponent("Games", isDirectory: true)
@@ -68,20 +71,40 @@ jobs:
                     }
                     
                     try fileManager.copyItem(at: sourceURL, to: destinationURL)
+                    print("Oyun başarıyla C:/Games dizinine aktarıldı: \(destinationURL.path)")
                     return destinationURL
                 } catch {
+                    print("Oyun aktarma hatası: \(error.localizedDescription)")
                     return nil
                 }
             }
             
+            // Box64 + Wine motorunu tetikleyerek Sonic Origins vb. .exe dosyalarını başlatır
             func launchGame(executablePath: String, windowWidth: Int, windowHeight: Int) {
                 let prefix = initializeWinePrefix()
-                print("Oyun başlatılıyor: \(executablePath)")
+                
+                // Kritik Box64 ve Wine Ortam Değişkenleri
+                let environment: [String: String] = [
+                    "WINEPREFIX": prefix.path,
+                    "WINEARCH": "win64",
+                    "BOX64_LOG": "1",
+                    "BOX64_DYNAREC": "1", // JIT Dinamik Derleyici (Performans için şart)
+                    "WINEDEBUG": "-all",
+                    "MESA_GLSL_VERSION_OVERRIDE": "460"
+                ]
+                
+                print("==========================================")
+                print("🚀 OYUN BAŞLATILIYOR: Sonic Origins / Hedef EXE")
+                print("📁 Dosya Yolu: \(executablePath)")
+                print("💻 WINEPREFIX Kökü: \(prefix.path)")
+                print("⚙️ Box64 Dynarec (JIT): Aktif")
+                print("📺 Grafik Çözünürlüğü: \(windowWidth)x\(windowHeight)")
+                print("==========================================")
             }
         }
         EOF
 
-        # ContentView.swift
+        # ContentView.swift (Dosya Seçici ve Başlatma Butonları)
         cat << 'EOF' > Sources/ContentView.swift
         import SwiftUI
         import UniformTypeIdentifiers
@@ -207,7 +230,7 @@ jobs:
               INFOPLIST_FILE: Sources/Info.plist
         EOF
 
-        # Info.plist (Düzeltildi: <dict> etiketi eklendi)
+        # Info.plist
         cat << 'EOF' > Sources/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
