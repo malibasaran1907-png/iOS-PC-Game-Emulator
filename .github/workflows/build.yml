@@ -23,12 +23,154 @@ jobs:
       run: |
         brew install xcodegen
 
-    - name: Prepare Project Structure
+    - name: Prepare Project Structure & Overwrite Files
       run: |
         mkdir -p Sources
 
-        mv GameRuntimeManager.swift Sources/
-        mv ContentView.swift Sources/
+        # GameRuntimeManager.swift dosyasını doğrudan güncel haliyle oluşturalım
+        cat << 'EOF' > Sources/GameRuntimeManager.swift
+        import Foundation
+
+        class GameRuntimeManager {
+            static let shared = GameRuntimeManager()
+            private let fileManager = FileManager.default
+            
+            func initializeWinePrefix() -> URL {
+                let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let winePrefix = documentsPath.appendingPathComponent(".wine", isDirectory: true)
+                
+                if !fileManager.fileExists(atPath: winePrefix.path) {
+                    do {
+                        try fileManager.createDirectory(at: winePrefix, withIntermediateDirectories: true, attributes: nil)
+                    } catch {
+                        print("Wine prefix oluşturulamadı: \(error.localizedDescription)")
+                    }
+                }
+                return winePrefix
+            }
+            
+            func importGameFile(from sourceURL: URL) -> URL? {
+                let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                let gamesDirectory = documentsPath.appendingPathComponent("Games", isDirectory: true)
+                
+                do {
+                    if !fileManager.fileExists(atPath: gamesDirectory.path) {
+                        try fileManager.createDirectory(at: gamesDirectory, withIntermediateDirectories: true)
+                    }
+                    
+                    let destinationURL = gamesDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+                    
+                    guard sourceURL.startAccessingSecurityScopedResource() else { return nil }
+                    defer { sourceURL.stopAccessingSecurityScopedResource() }
+                    
+                    if fileManager.fileExists(atPath: destinationURL.path) {
+                        try fileManager.removeItem(at: destinationURL)
+                    }
+                    
+                    try fileManager.copyItem(at: sourceURL, to: destinationURL)
+                    return destinationURL
+                } catch {
+                    return nil
+                }
+            }
+            
+            func launchGame(executablePath: String, windowWidth: Int, windowHeight: Int) {
+                let prefix = initializeWinePrefix()
+                print("Oyun başlatılıyor: \(executablePath)")
+            }
+        }
+        EOF
+
+        # ContentView.swift dosyasını butonlu güncel haliyle doğrudan oluşturalım
+        cat << 'EOF' > Sources/ContentView.swift
+        import SwiftUI
+        import UniformTypeIdentifiers
+
+        struct ContentView: View {
+            @State private var isImporterPresented = false
+            @State private var importedGameName: String = "Henüz oyun seçilmedi"
+            @State private var selectedGameURL: URL?
+            
+            var body: some View {
+                VStack(spacing: 25) {
+                    Image(systemName: "gamecontroller.fill")
+                        .font(.system(size: 60))
+                        .foregroundColor(.blue)
+                    
+                    Text("iOS PC Oyun Emülatörü")
+                        .font(.title)
+                        .bold()
+                    
+                    VStack(spacing: 8) {
+                        Text("Aktif Oyun:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(importedGameName)
+                            .font(.subheadline)
+                            .bold()
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                    
+                    Button(action: {
+                        isImporterPresented = true
+                    }) {
+                        HStack {
+                            Image(systemName: "folder.badge.plus")
+                            Text("Oyun Dosyası Seç (.exe)")
+                        }
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                    }
+                    
+                    if selectedGameURL != nil {
+                        Button(action: {
+                            if let url = selectedGameURL {
+                                GameRuntimeManager.shared.launchGame(
+                                    executablePath: url.path,
+                                    windowWidth: 1280,
+                                    windowHeight: 720
+                                )
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "play.fill")
+                                Text("Oyunu Başlat")
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color.green)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                        }
+                    }
+                }
+                .padding(20)
+                .fileImporter(
+                    isPresented: $isImporterPresented,
+                    allowedContentTypes: [.item],
+                    allowsMultipleSelection: false
+                ) { result in
+                    do {
+                        guard let selectedURL = try result.get().first else { return }
+                        if let savedURL = GameRuntimeManager.shared.importGameFile(from: selectedURL) {
+                            selectedGameURL = savedURL
+                            importedGameName = savedURL.lastPathComponent
+                        }
+                    } catch {
+                        print("Dosya seçme hatası: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        EOF
 
         cat << 'EOF' > Sources/AppMain.swift
         import SwiftUI
@@ -54,18 +196,20 @@ jobs:
             deploymentTarget: "16.0"
             sources: [Sources]
             settings:
+              PRODUCT_BUNDLE_IDENTIFIER: com.emulatore.pcgame.PCGameEmulator
+              EXECUTABLE_NAME: PCGameEmulator
+              PRODUCT_NAME: PCGameEmulator
               CODE_SIGN_IDENTITY: ""
               CODE_SIGNING_REQUIRED: "NO"
               CODE_SIGNING_ALLOWED: "NO"
               INFOPLIST_FILE: Sources/Info.plist
         EOF
 
-        # CFBundleExecutable anahtarı eklenerek hata giderildi
         cat << 'EOF' > Sources/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
-        <dict>
+        dict>
             <key>CFBundleIdentifier</key>
             <string>com.emulatore.pcgame.PCGameEmulator</string>
             <key>CFBundleName</key>
@@ -113,8 +257,6 @@ jobs:
           APP_PATH=$(find build -name "PCGameEmulator.app" -type d | head -n 1)
         fi
 
-        echo "Bulunan App Yolu: $APP_PATH"
-        
         mkdir -p build/Payload
         cp -R "$APP_PATH" build/Payload/
         
