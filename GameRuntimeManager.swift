@@ -5,7 +5,7 @@ class GameRuntimeManager {
     
     private let fileManager = FileManager.default
     
-    // Çalışma ortamı dizinlerini hazırlar (C: Sürücüsü simülasyonu için kök dizin)
+    // Çalışma ortamı dizinlerini hazırlar
     func initializeWinePrefix() -> URL {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let winePrefix = documentsPath.appendingPathComponent(".wine", isDirectory: true)
@@ -19,6 +19,35 @@ class GameRuntimeManager {
             }
         }
         return winePrefix
+    }
+    
+    // Telefonun dosya yöneticisinden seçilen oyunu uygulama dizinine kopyalar
+    func importGameFile(from sourceURL: URL) -> URL? {
+        let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let gamesDirectory = documentsPath.appendingPathComponent("Games", isDirectory: true)
+        
+        do {
+            if !fileManager.fileExists(atPath: gamesDirectory.path) {
+                try fileManager.createDirectory(at: gamesDirectory, withIntermediateDirectories: true)
+            }
+            
+            let destinationURL = gamesDirectory.appendingPathComponent(sourceURL.lastPathComponent)
+            
+            // Güvenlik kapsamındaki (Security-scoped) kaynağa erişimi başlat
+            guard sourceURL.startAccessingSecurityScopedResource() else { return nil }
+            defer { sourceURL.stopAccessingSecurityScopedResource() }
+            
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+            
+            try fileManager.copyItem(at: sourceURL, to: destinationURL)
+            print("Oyun başarıyla içe aktarıldı: \(destinationURL.path)")
+            return destinationURL
+        } catch {
+            print("Oyun içe aktarılamadı: \(error.localizedDescription)")
+            return nil
+        }
     }
     
     // Belirtilen .exe dosyasını Box64 ve Wine ortamı ile tetikler
