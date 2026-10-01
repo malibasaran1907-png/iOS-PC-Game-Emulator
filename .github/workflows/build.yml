@@ -60,7 +60,6 @@ jobs:
               INFOPLIST_FILE: Sources/Info.plist
         EOF
 
-        # Info.plist dosyasındaki eksik '<' karakteri düzeltildi
         cat << 'EOF' > Sources/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -96,20 +95,28 @@ jobs:
       run: |
         xcodegen generate
 
-        # Arşivle (Archive)
-        xcodebuild archive \
-          -project PCGameEmulator.xcodeproj \
-          -scheme PCGameEmulator \
-          -archivePath build/PCGameEmulator.xcarchive \
-          -sdk iphoneos \
-          -configuration Release \
-          CODE_SIGN_IDENTITY="" \
-          CODE_SIGNING_REQUIRED=NO \
-          CODE_SIGNING_ALLOWED=NO
+        # Doğrudan derleme ve çıktı konumu yakalama
+        xcodebuild -project PCGameEmulator.xcodeproj \
+                   -scheme PCGameEmulator \
+                   -sdk iphoneos \
+                   -configuration Release \
+                   CODE_SIGN_IDENTITY="" \
+                   CODE_SIGNING_REQUIRED=NO \
+                   CODE_SIGNING_ALLOWED=NO \
+                   build
 
-        # IPA klasörünü oluştur ve paketle
+        # Derlenen .app dosyasını bul ve Payload içine kopyala
+        APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "PCGameEmulator.app" -type d | head -n 1)
+        
+        if [ -z "$APP_PATH" ]; then
+          APP_PATH=$(find build -name "PCGameEmulator.app" -type d | head -n 1)
+        fi
+
+        echo "Bulunan App Yolu: $APP_PATH"
+        
         mkdir -p build/Payload
-        mv build/PCGameEmulator.xcarchive/Products/Applications/PCGameEmulator.app build/Payload/
+        cp -R "$APP_PATH" build/Payload/
+        
         cd build
         zip -r PCGameEmulator.ipa Payload
         cd ..
