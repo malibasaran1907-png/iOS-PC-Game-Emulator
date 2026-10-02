@@ -19,18 +19,13 @@ jobs:
         sudo xcode-select -switch /Applications/Xcode.app
         xcodebuild -version
 
-    - name: Install XcodeGen (Project Generator)
+    - name: Install XcodeGen
       run: |
         brew install xcodegen
 
-    - name: Prepare Project Structure & Overwrite Files
+    - name: Prepare Sources
       run: |
         mkdir -p Sources
-        mkdir -p Frameworks
-
-        cat << 'EOF' > Frameworks/README.md
-        Box64 ve Wine dynamic libraries (.dylib) bu dizine yerleştirilir.
-        EOF
 
         cat << 'EOF' > Sources/GameRuntimeManager.swift
         import Foundation
@@ -42,14 +37,8 @@ jobs:
             func initializeWinePrefix() -> URL {
                 let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let winePrefix = documentsPath.appendingPathComponent(".wine", isDirectory: true)
-                
                 if !fileManager.fileExists(atPath: winePrefix.path) {
-                    do {
-                        try fileManager.createDirectory(at: winePrefix, withIntermediateDirectories: true, attributes: nil)
-                        print("Wine prefix (C: Sürücüsü) oluşturuldu: \(winePrefix.path)")
-                    } catch {
-                        print("Wine prefix oluşturulamadı: \(error.localizedDescription)")
-                    }
+                    try? fileManager.createDirectory(at: winePrefix, withIntermediateDirectories: true)
                 }
                 return winePrefix
             }
@@ -57,53 +46,26 @@ jobs:
             func importGameFile(from sourceURL: URL) -> URL? {
                 let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let gamesDirectory = documentsPath.appendingPathComponent("Games", isDirectory: true)
-                
                 do {
                     if !fileManager.fileExists(atPath: gamesDirectory.path) {
                         try fileManager.createDirectory(at: gamesDirectory, withIntermediateDirectories: true)
                     }
-                    
                     let destinationURL = gamesDirectory.appendingPathComponent(sourceURL.lastPathComponent)
-                    
                     guard sourceURL.startAccessingSecurityScopedResource() else { return nil }
                     defer { sourceURL.stopAccessingSecurityScopedResource() }
-                    
                     if fileManager.fileExists(atPath: destinationURL.path) {
                         try fileManager.removeItem(at: destinationURL)
                     }
-                    
                     try fileManager.copyItem(at: sourceURL, to: destinationURL)
-                    print("Oyun başarıyla içe aktarıldı: \(destinationURL.path)")
                     return destinationURL
                 } catch {
-                    print("Aktarma hatası: \(error.localizedDescription)")
                     return nil
                 }
             }
             
             func launchGame(executablePath: String, windowWidth: Int, windowHeight: Int) {
                 let prefix = initializeWinePrefix()
-                let bundlePath = Bundle.main.bundlePath
-                let frameworksPath = "\(bundlePath)/Frameworks"
-                
-                let environment: [String: String] = [
-                    "WINEPREFIX": prefix.path,
-                    "WINEARCH": "win64",
-                    "BOX64_LOG": "2",
-                    "BOX64_DYNAREC": "1",
-                    "BOX64_LD_LIBRARY_PATH": frameworksPath,
-                    "WINEDEBUG": "-all",
-                    "LIBGL_ALWAYS_SOFTWARE": "0",
-                    "MESA_GLSL_VERSION_OVERRIDE": "460"
-                ]
-                
-                print("==========================================")
-                print("🚀 BOX64 & WINE MOTORU TETİKLENİYOR")
-                print("📁 Hedef EXE: \(executablePath)")
-                print("💻 WINEPREFIX: \(prefix.path)")
-                print("📦 Frameworks Yolu: \(frameworksPath)")
-                print("⚙️ JIT Dynarec: Aktif")
-                print("==========================================")
+                print("Oyun Başlatılıyor: \(executablePath)")
             }
         }
         EOF
@@ -190,9 +152,7 @@ jobs:
                             selectedGameURL = savedURL
                             importedGameName = savedURL.lastPathComponent
                         }
-                    } catch {
-                        print("Dosya seçme hatası: \(error.localizedDescription)")
-                    }
+                    } catch {}
                 }
             }
         }
@@ -267,7 +227,6 @@ jobs:
     - name: Build and Package IPA
       run: |
         xcodegen generate
-
         xcodebuild -project PCGameEmulator.xcodeproj \
                    -scheme PCGameEmulator \
                    -sdk iphoneos \
@@ -278,14 +237,12 @@ jobs:
                    build
 
         APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "PCGameEmulator.app" -type d | head -n 1)
-        
         if [ -z "$APP_PATH" ]; then
           APP_PATH=$(find build -name "PCGameEmulator.app" -type d | head -n 1)
         fi
 
         mkdir -p build/Payload
         cp -R "$APP_PATH" build/Payload/
-        
         cd build
         zip -r PCGameEmulator.ipa Payload
         cd ..
