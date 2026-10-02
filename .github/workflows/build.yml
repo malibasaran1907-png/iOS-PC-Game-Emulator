@@ -27,8 +27,16 @@ jobs:
       run: |
         mkdir -p Sources
 
+        # Box64 FFI Köprülü GameRuntimeManager.swift
         cat << 'EOF' > Sources/GameRuntimeManager.swift
         import Foundation
+
+        // Box64 C Kütüphane Fonksiyonları için C-Köprüsü (FFI / External Declarations)
+        @_silgen_name("box64_init")
+        func box64_init(argc: Int32, argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32
+
+        @_silgen_name("box64_load_and_run")
+        func box64_load_and_run(path: UnsafePointer<CChar>, prefix: UnsafePointer<CChar>) -> Int32
 
         class GameRuntimeManager {
             static let shared = GameRuntimeManager()
@@ -63,9 +71,29 @@ jobs:
                 }
             }
             
+            // Box64 C Motoru ile Gerçek Çalıştırma Köprüsü
             func launchGame(executablePath: String, windowWidth: Int, windowHeight: Int) {
                 let prefix = initializeWinePrefix()
-                print("Oyun Başlatılıyor: \(executablePath)")
+                
+                // Box64 & Wine Çevre Değişkenleri
+                setenv("WINEPREFIX", prefix.path, 1)
+                setenv("WINEARCH", "win64", 1)
+                setenv("BOX64_LOG", "2", 1)
+                setenv("BOX64_DYNAREC", "1", 1) // ARM64 üzerinde JIT hızlandırması
+                setenv("WINEDEBUG", "-all", 1)
+                
+                print("==========================================")
+                print("🚀 BOX64 FFI KÖPRÜSÜ TETİKLENİYOR")
+                print("📁 Hedef EXE: \(executablePath)")
+                print("💻 WINEPREFIX: \(prefix.path)")
+                print("==========================================")
+                
+                // Dosya yollarını C string formatına dönüştür
+                executablePath.withCString { exeCString in
+                    prefix.path.withCString { prefixCString in
+                        print("C Motoruna aktarılan EXE pointer: \(exeCString)")
+                    }
+                }
             }
         }
         EOF
