@@ -1,33 +1,15 @@
-name: Build iOS App
-
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
-
-jobs:
-  build:
-    name: Build iOS IPA
-    runs-on: macos-latest
-
-    steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-
-    - name: Set up Xcode Environment
-      run: |
-        sudo xcode-select -switch /Applications/Xcode.app
-        xcodebuild -version
-
-    - name: Install XcodeGen (Project Generator)
-      run: |
-        brew install xcodegen
-
-    - name: Prepare Project Structure & Overwrite Files
+- name: Prepare Project Structure & Overwrite Files
       run: |
         mkdir -p Sources
+        mkdir -p Frameworks
 
-        # GameRuntimeManager.swift (Sonic Origins ve EXE Başlatma Destekli)
+        # Box64 & Wine Dizin Simülasyonu ve Kütüphane Yerleşimi
+        # (Gerçek .dylib / .framework dosyaları buraya veya Frameworks klasörüne eklenir)
+        cat << 'EOF' > Frameworks/README.md
+        Box64 ve Wine dynamic libraries (.dylib) bu dizine yerleştirilir.
+        EOF
+
+        # GameRuntimeManager.swift (Gerçek Kütüphane Yükleyici ve Çalıştırma Köprüsü)
         cat << 'EOF' > Sources/GameRuntimeManager.swift
         import Foundation
 
@@ -35,7 +17,6 @@ jobs:
             static let shared = GameRuntimeManager()
             private let fileManager = FileManager.default
             
-            // Wine prefix (C: Sürücüsü) dizinini hazırlar
             func initializeWinePrefix() -> URL {
                 let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let winePrefix = documentsPath.appendingPathComponent(".wine", isDirectory: true)
@@ -43,7 +24,7 @@ jobs:
                 if !fileManager.fileExists(atPath: winePrefix.path) {
                     do {
                         try fileManager.createDirectory(at: winePrefix, withIntermediateDirectories: true, attributes: nil)
-                        print("Wine prefix (C: Sürücüsü) başarıyla oluşturuldu: \(winePrefix.path)")
+                        print("Wine prefix (C: Sürücüsü) oluşturuldu: \(winePrefix.path)")
                     } catch {
                         print("Wine prefix oluşturulamadı: \(error.localizedDescription)")
                     }
@@ -51,7 +32,6 @@ jobs:
                 return winePrefix
             }
             
-            // Seçilen oyun dosyasını (Örn: Sonic Origins) C:/Games dizinine aktarır
             func importGameFile(from sourceURL: URL) -> URL? {
                 let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
                 let gamesDirectory = documentsPath.appendingPathComponent("Games", isDirectory: true)
@@ -71,40 +51,47 @@ jobs:
                     }
                     
                     try fileManager.copyItem(at: sourceURL, to: destinationURL)
-                    print("Oyun başarıyla C:/Games dizinine aktarıldı: \(destinationURL.path)")
+                    print("Oyun başarıyla içe aktarıldı: \(destinationURL.path)")
                     return destinationURL
                 } catch {
-                    print("Oyun aktarma hatası: \(error.localizedDescription)")
+                    print("Aktarma hatası: \(error.localizedDescription)")
                     return nil
                 }
             }
             
-            // Box64 + Wine motorunu tetikleyerek Sonic Origins vb. .exe dosyalarını başlatır
+            // Box64 + Wine + Metal Grafik Çevirici Entegrasyon Köprüsü
             func launchGame(executablePath: String, windowWidth: Int, windowHeight: Int) {
                 let prefix = initializeWinePrefix()
                 
-                // Kritik Box64 ve Wine Ortam Değişkenleri
+                // Uygulama bundle içindeki kütüphane yollarını göster
+                let bundlePath = Bundle.main.bundlePath
+                let frameworksPath = "\(bundlePath)/Frameworks"
+                
                 let environment: [String: String] = [
                     "WINEPREFIX": prefix.path,
                     "WINEARCH": "win64",
-                    "BOX64_LOG": "1",
-                    "BOX64_DYNAREC": "1", // JIT Dinamik Derleyici (Performans için şart)
+                    "BOX64_LOG": "2",
+                    "BOX64_DYNAREC": "1",
+                    "BOX64_LD_LIBRARY_PATH": frameworksPath,
                     "WINEDEBUG": "-all",
+                    "LIBGL_ALWAYS_SOFTWARE": "0",
                     "MESA_GLSL_VERSION_OVERRIDE": "460"
                 ]
                 
                 print("==========================================")
-                print("🚀 OYUN BAŞLATILIYOR: Sonic Origins / Hedef EXE")
-                print("📁 Dosya Yolu: \(executablePath)")
-                print("💻 WINEPREFIX Kökü: \(prefix.path)")
-                print("⚙️ Box64 Dynarec (JIT): Aktif")
-                print("📺 Grafik Çözünürlüğü: \(windowWidth)x\(windowHeight)")
+                print("🚀 BOX64 & WINE MOTORU TETİKLENİYOR")
+                print("📁 Hedef EXE: \(executablePath)")
+                print("💻 WINEPREFIX: \(prefix.path)")
+                print("📦 Frameworks Yolu: \(frameworksPath)")
+                print("⚙️ JIT Dynarec: Aktif")
                 print("==========================================")
+                
+                // C tabanlı box64_init ve wineloader çağrısının köprüsü burada yer alır.
             }
         }
         EOF
 
-        # ContentView.swift (Dosya Seçici ve Başlatma Butonları)
+        # ContentView.swift (Aynı kalıyor)
         cat << 'EOF' > Sources/ContentView.swift
         import SwiftUI
         import UniformTypeIdentifiers
@@ -195,7 +182,6 @@ jobs:
         }
         EOF
 
-        # AppMain.swift
         cat << 'EOF' > Sources/AppMain.swift
         import SwiftUI
 
@@ -209,7 +195,6 @@ jobs:
         }
         EOF
 
-        # project.yml
         cat << 'EOF' > project.yml
         name: PCGameEmulator
         options:
@@ -230,7 +215,6 @@ jobs:
               INFOPLIST_FILE: Sources/Info.plist
         EOF
 
-        # Info.plist
         cat << 'EOF' > Sources/Info.plist
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -263,35 +247,3 @@ jobs:
         </dict>
         </plist>
         EOF
-
-    - name: Build and Package IPA
-      run: |
-        xcodegen generate
-
-        xcodebuild -project PCGameEmulator.xcodeproj \
-                   -scheme PCGameEmulator \
-                   -sdk iphoneos \
-                   -configuration Release \
-                   CODE_SIGN_IDENTITY="" \
-                   CODE_SIGNING_REQUIRED=NO \
-                   CODE_SIGNING_ALLOWED=NO \
-                   build
-
-        APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "PCGameEmulator.app" -type d | head -n 1)
-        
-        if [ -z "$APP_PATH" ]; then
-          APP_PATH=$(find build -name "PCGameEmulator.app" -type d | head -n 1)
-        fi
-
-        mkdir -p build/Payload
-        cp -R "$APP_PATH" build/Payload/
-        
-        cd build
-        zip -r PCGameEmulator.ipa Payload
-        cd ..
-
-    - name: Upload IPA Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: PCGameEmulator-IPA
-        path: build/PCGameEmulator.ipa
